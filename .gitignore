@@ -1,0 +1,12 @@
+# Never commit real credentials or local Codex config
+config.toml
+auth.json
+*.bak
+.env
+*.key
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
