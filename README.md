@@ -138,6 +138,26 @@ The script fetches `/v1/models`, clones each model ID from a **complete template
 
 ---
 
+## One-command toggle: custom gateway ↔ OpenAI login
+
+`scripts/codex-mode.ps1` (macOS / Linux: `codex-mode.sh`) switches between the two modes. It only touches the four top-level keys in `config.toml` (`model`, `model_provider`, `preferred_auth_method`, `model_catalog_json`); everything else (providers, plugins, MCP servers, project trust...) is preserved:
+
+```powershell
+.\scripts\codex-mode.ps1 status            # show current mode
+.\scripts\codex-mode.ps1 openai            # switch to OpenAI login mode (ChatGPT account + bundled catalog)
+.\scripts\codex-mode.ps1 custom            # switch back to the custom gateway (restores last picker choice)
+.\scripts\codex-mode.ps1 openai -Restart   # switch and auto-restart the desktop app
+```
+
+Notes:
+
+- Config is read at startup only — **fully quit and relaunch the app** after switching (`-Restart` handles it).
+- **First switch to openai mode** requires a one-time `codex login` (ChatGPT account, browser OAuth); the script reminds you when `auth.json` has no ChatGPT tokens.
+- Switching to openai saves the current custom settings (model / provider / catalog) to `~/.codex/codex-mode-state.json` and `custom` restores them verbatim — picker choices are never lost.
+- In openai mode the `[model_providers.*]` blocks stay in the file but are inert; switch back anytime.
+
+---
+
 ## Troubleshooting
 
 ### Desktop picker doesn't show my model / new upstream models are invisible
@@ -171,7 +191,9 @@ codex-desktop-custom-model/
     ├── check-provider.sh         # macOS / Linux compatibility check
     ├── sync-model-catalog.ps1    # sync model catalog from gateway (desktop picker)
     ├── sync-model-catalog.sh     # same, macOS / Linux
-    └── model-entry-template.json # complete ModelInfo template entry (used by sync)
+    ├── model-entry-template.json # complete ModelInfo template entry (used by sync)
+    ├── codex-mode.ps1            # toggle custom gateway ↔ OpenAI login mode
+    └── codex-mode.sh             # same, macOS / Linux
 ```
 
 ## License

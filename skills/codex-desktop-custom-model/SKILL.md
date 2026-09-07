@@ -116,6 +116,10 @@ Catalog pitfalls (any one invalidates the ENTIRE config → app blocks on "Finis
 - File MUST be UTF-8 **without BOM** (PS 5.1 `Set-Content -Encoding UTF8` adds one; use `[IO.File]::WriteAllText` with `UTF8Encoding($false)`).
 - Validate TOML+JSON before restarting the app.
 
+## Switching between custom gateway and OpenAI login
+
+`scripts/codex-mode.ps1 status|custom|openai` (`.sh` on macOS/Linux) toggles only the four top-level keys (`model`, `model_provider`, `preferred_auth_method`, `model_catalog_json`) and preserves the rest of config.toml. Switching to openai saves custom settings to `~/.codex/codex-mode-state.json`; `custom` restores them verbatim. Restart the app after switching (`-Restart` / `--restart` does it). First openai-mode use needs a one-time `codex login` (ChatGPT account).
+
 ## Troubleshooting
 
 - **Picker hides the model / new upstream models invisible** → the desktop never fetches `/v1/models` from custom providers; use `model_catalog_json` + the sync script (section above). Hard-coding `model` + `model_provider` still works for a single locked model.

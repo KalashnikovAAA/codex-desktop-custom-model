@@ -137,6 +137,26 @@ model_catalog_json = 'C:\Users\<你>\.codex\gateway-model-catalog.json'
 
 ---
 
+## 一键切换：自定义网关 ↔ OpenAI 正常登录
+
+`scripts/codex-mode.ps1`（macOS / Linux 用 `codex-mode.sh`）在两种模式间切换。它只动 `config.toml` 顶部的 4 个键（`model`、`model_provider`、`preferred_auth_method`、`model_catalog_json`），其余配置（providers、插件、MCP、项目信任等）原样保留：
+
+```powershell
+.\scripts\codex-mode.ps1 status            # 查看当前模式
+.\scripts\codex-mode.ps1 openai            # 切到 OpenAI 登录模式（ChatGPT 账号 + 官方目录）
+.\scripts\codex-mode.ps1 custom            # 切回自定义网关（恢复上次的选择器选择）
+.\scripts\codex-mode.ps1 openai -Restart   # 切换并自动重启桌面版
+```
+
+要点：
+
+- 配置只在启动时读取，切换后需**完全退出并重启应用**（`-Restart` 自动处理）。
+- **首次切到 openai 模式**需先运行一次 `codex login` 用 ChatGPT 账号完成浏览器登录（脚本检测到 `auth.json` 没有 ChatGPT 令牌时会提醒）。
+- 切到 openai 时，当前自定义设置（model / provider / catalog）会存入 `~/.codex/codex-mode-state.json`，切回 custom 时原样恢复——你在选择器里挑的模型不会丢。
+- openai 模式下 `[model_providers.*]` 块留在配置里但不生效，随时可切回。
+
+---
+
 ## 排障
 
 ### 桌面版模型下拉框不显示我的模型 / 上游新增了模型却看不到
@@ -170,7 +190,9 @@ codex-desktop-custom-model/
     ├── check-provider.sh         # macOS / Linux 兼容性检查
     ├── sync-model-catalog.ps1    # 从网关同步模型目录（桌面版选择器用）
     ├── sync-model-catalog.sh     # 同上，macOS / Linux
-    └── model-entry-template.json # 完整 ModelInfo 模板条目（同步脚本依赖）
+    ├── model-entry-template.json # 完整 ModelInfo 模板条目（同步脚本依赖）
+    ├── codex-mode.ps1            # 一键切换 自定义网关 ↔ OpenAI 登录模式
+    └── codex-mode.sh             # 同上，macOS / Linux
 ```
 
 ## 许可证
