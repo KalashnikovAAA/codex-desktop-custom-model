@@ -100,9 +100,25 @@ experimental_bearer_token = "sk-xxxx"
 
 Fully quit and relaunch the desktop app. On Windows, launching the desktop app from a terminal that already exported the env var ensures it inherits the key.
 
+## Making the desktop picker show ALL gateway models
+
+The desktop never calls `/v1/models` on a custom provider; its `model/list` only reads `~/.codex/models_cache.json` and no online refresh happens in API-key mode. Fix with the top-level `model_catalog_json` key (codex ≥ 0.124), which points at a JSON file that replaces the bundled catalog at startup:
+
+```toml
+model_catalog_json = 'C:\Users\<you>\.codex\gateway-model-catalog.json'   # above first [table]
+```
+
+Generate/refresh it with `scripts/sync-model-catalog.ps1` (or `.sh`) — it reads the provider creds from config.toml, fetches `/v1/models`, and clones each entry from `scripts/model-entry-template.json`. Re-run + restart the app whenever upstream adds models.
+
+Catalog pitfalls (any one invalidates the ENTIRE config → app blocks on "Finish Windows setup · config_load" with a UAC loop):
+
+- Every entry MUST carry `base_instructions` OR `model_messages.instructions_template` — clone from the template, never hand-write minimal entries.
+- File MUST be UTF-8 **without BOM** (PS 5.1 `Set-Content -Encoding UTF8` adds one; use `[IO.File]::WriteAllText` with `UTF8Encoding($false)`).
+- Validate TOML+JSON before restarting the app.
+
 ## Troubleshooting
 
-- **Desktop picker hides the model** but CLI `/model` lists it → known display bug; hard-code `model` + `model_provider` in config.toml, it still takes effect.
+- **Picker hides the model / new upstream models invisible** → the desktop never fetches `/v1/models` from custom providers; use `model_catalog_json` + the sync script (section above). Hard-coding `model` + `model_provider` still works for a single locked model.
 - **400 / tool-calling fails** → gateway lacks `/v1/responses`; switch gateway or add a Responses-compatible proxy.
 - **Custom provider ignored** → likely signed in with ChatGPT subscription; set `preferred_auth_method = "apikey"`, sign out in-app, restart.
 - **App won't self-update** → if installed from Microsoft Store (MSIX), `WindowsApps\` is write-protected; update via Store → Library, or `winget upgrade`. Unrelated to proxy/network.

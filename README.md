@@ -94,6 +94,7 @@ Fully quit and relaunch the Codex desktop app (config is **not** hot-reloaded).
 | `http_headers` | Optional extra request headers |
 | `query_params` | Optional extra query-string params |
 | `model_reasoning_effort` | Optional: `low` / `medium` / `high` |
+| `model_catalog_json` | Optional: absolute path to a custom model-catalog JSON that replaces the bundled catalog at startup (see dedicated section) |
 
 ### Custom request shaping
 
@@ -109,10 +110,41 @@ api-version = "2026-01-01"
 
 ---
 
+## Show all gateway models in the desktop picker (`model_catalog_json`)
+
+**Why newly added upstream models never appear:** the Codex desktop app **never calls `/v1/models` on a custom provider** (verifiable in logs: the gateway only ever receives `/v1/responses` requests). The picker is fed by the app-server's `model/list`, which only reads the local cache `~/.codex/models_cache.json` — and in API-key mode (no ChatGPT login) no online catalog refresh ever happens. So the picker forever shows the bundled catalog plus the single `model` hard-coded in config.
+
+**Fix:** the top-level config key `model_catalog_json` (supported since codex 0.124, verified on 0.151) — point it at a JSON file that is loaded at startup and **replaces the bundled catalog**, so the picker mirrors your gateway:
+
+```toml
+# at the TOP of config.toml, above the first [table]
+model_catalog_json = 'C:\Users\<you>\.codex\gateway-model-catalog.json'
+```
+
+Generate/refresh the catalog with the bundled script (it reads the provider's base_url and key from config.toml automatically):
+
+```powershell
+.\scripts\sync-model-catalog.ps1   # Windows
+./scripts/sync-model-catalog.sh    # macOS / Linux
+```
+
+The script fetches `/v1/models`, clones each model ID from a **complete template entry** (`scripts/model-entry-template.json`), and writes BOM-free UTF-8 JSON. When upstream adds models: re-run the script → fully quit and relaunch the desktop app.
+
+### Three catalog JSON pitfalls (any one makes the WHOLE config invalid)
+
+1. **Every entry needs `base_instructions` OR `model_messages.instructions_template`.** Hand-written minimal entries fail with `model ... is missing both base_instructions and model_messages.instructions_template` — always clone from the template.
+2. **No UTF-8 BOM.** Windows PowerShell 5.1's `Set-Content -Encoding UTF8` writes a BOM, which codex's serde_json rejects. Write with `[IO.File]::WriteAllText($p, $json, [Text.UTF8Encoding]::new($false))`.
+3. **A catalog that fails to parse invalidates the entire config.** The desktop app then blocks on "Finish Windows setup · config_load" and retries in a loop, surfacing as repeated UAC prompts — it looks like a UAC problem, but the config file is broken. Validate (Python `tomllib` / `json`) before restarting.
+
+---
+
 ## Troubleshooting
 
-### Desktop model picker doesn't show my model
-A known client display issue: the model catalog may load but the desktop selector filters out custom models. If the CLI works (`codex` → `/model` lists it) but the desktop picker doesn't, **hard-code `model` and `model_provider` in `config.toml`** — the setting still takes effect even when the picker hides it.
+### Desktop picker doesn't show my model / new upstream models are invisible
+Root cause: the desktop never fetches `/v1/models` from a custom provider (see the `model_catalog_json` section above). Use `model_catalog_json` + the sync script to mirror the gateway in the picker. If you only want one specific model, hard-coding `model` + `model_provider` in `config.toml` still works even when the picker hides it.
+
+### App stuck on "Finish Windows setup", UAC prompt loop (`config_load`)
+Not a UAC problem: a `config.toml` parse failure — or a file it references (e.g. the `model_catalog_json` JSON) — invalidates the whole config. The setup wizard fails at `config_load` and retries, which surfaces as a UAC prompt loop. Validate your TOML/JSON (watch for BOM and required fields), fix, then restart.
 
 ### Requests fail with 400 / tool-calling breaks
 Your gateway likely only supports `/v1/chat/completions`, not `/v1/responses`. Codex forces the Responses API. Either switch to a gateway that supports it, or run a translation proxy in front.
@@ -135,8 +167,11 @@ codex-desktop-custom-model/
 │   └── codex-desktop-custom-model/
 │       └── SKILL.md     # importable Qoder / AI-assistant skill
 └── scripts/
-    ├── check-provider.ps1   # Windows compatibility check
-    └── check-provider.sh    # macOS / Linux compatibility check
+    ├── check-provider.ps1        # Windows compatibility check
+    ├── check-provider.sh         # macOS / Linux compatibility check
+    ├── sync-model-catalog.ps1    # sync model catalog from gateway (desktop picker)
+    ├── sync-model-catalog.sh     # same, macOS / Linux
+    └── model-entry-template.json # complete ModelInfo template entry (used by sync)
 ```
 
 ## License

@@ -93,6 +93,7 @@ export CUSTOM_GATEWAY_KEY="sk-xxxx"
 | `http_headers` | 可选的额外请求头 |
 | `query_params` | 可选的额外查询参数 |
 | `model_reasoning_effort` | 可选：`low` / `medium` / `high` |
+| `model_catalog_json` | 可选：自定义模型目录 JSON 的绝对路径，启动时替换内置目录（见上文专节） |
 
 ### 自定义请求
 
@@ -108,10 +109,41 @@ api-version = "2026-01-01"
 
 ---
 
+## 让桌面版选择器显示网关全部模型（`model_catalog_json`）
+
+**为什么上游新增了模型，桌面版却看不到：** Codex 桌面版对自定义 provider **从不请求 `/v1/models`**（日志可证：网关只收到过 `/v1/responses` 请求）。选择器的列表来自 app-server 的 `model/list`，它只读本地缓存 `~/.codex/models_cache.json`，且在 API Key 模式下（无 ChatGPT 登录态）不会发生在线目录刷新。于是选择器永远只显示内置目录 + config 里写死的那个 `model`——上游新模型自然不可见。
+
+**解决方案：** 顶层配置键 `model_catalog_json`（codex ≥ 0.124 支持，已在 0.151 验证）——指向一个 JSON 文件，启动时加载并**替换内置目录**，选择器从此镜像你的网关列表：
+
+```toml
+# 放在 config.toml 顶部、第一个 [table] 之前
+model_catalog_json = 'C:\Users\<你>\.codex\gateway-model-catalog.json'
+```
+
+生成/更新目录文件用自带脚本（自动从 config.toml 读 provider 的 base_url 与密钥）：
+
+```powershell
+.\scripts\sync-model-catalog.ps1   # Windows
+./scripts/sync-model-catalog.sh    # macOS / Linux
+```
+
+脚本拉取 `/v1/models`，把每个模型 ID 基于一份**完整模板条目**（`scripts/model-entry-template.json`）克隆生成，写出无 BOM 的 UTF-8 JSON。上游更新模型后：重跑脚本 → 完全退出并重启桌面版。
+
+### 目录 JSON 的三个坑（任何一条都会让整个 config 加载失败）
+
+1. **每个条目必须带 `base_instructions` 或 `model_messages.instructions_template` 之一。** 手写精简条目会报 `model ... is missing both base_instructions and model_messages.instructions_template`——务必用模板克隆，不要手写最小条目。
+2. **文件不能带 UTF-8 BOM。** Windows PowerShell 5.1 的 `Set-Content -Encoding UTF8` 会写 BOM，codex 的 serde_json 直接拒绝解析。写文件用：`[IO.File]::WriteAllText($p, $json, [Text.UTF8Encoding]::new($false))`。
+3. **目录解析失败 = 整个 config 无效。** 桌面版会卡在 "Finish Windows setup · config_load" 并反复重试，表现为连续弹 UAC——看起来像 UAC 问题，其实是配置文件坏了。改完先校验（Python `tomllib` / `json`）再重启应用。
+
+---
+
 ## 排障
 
-### 桌面版模型下拉框不显示我的模型
-已知的客户端显示问题：模型目录可能已加载，但桌面选择器过滤掉了自定义模型。若 CLI 能用（`codex` → `/model` 能列出）而桌面下拉框不显示，**直接在 `config.toml` 里写死 `model` 和 `model_provider`**——即使选择器隐藏，配置依然生效。
+### 桌面版模型下拉框不显示我的模型 / 上游新增了模型却看不到
+根因：桌面版对自定义 provider 从不拉取 `/v1/models`（见上文 `model_catalog_json` 一节）。用 `model_catalog_json` + 同步脚本让选择器镜像网关列表。若只想锁定某一个模型，直接在 `config.toml` 里写死 `model` 和 `model_provider`——即使选择器不显示，配置依然生效。
+
+### 启动卡在 "Finish Windows setup"，反复弹 UAC（`config_load`）
+不是 UAC 的问题：`config.toml` 或其引用的文件（如 `model_catalog_json` 指向的 JSON）解析失败会让**整个配置加载失败**，安装向导在 `config_load` 步骤失败并重试，表现为 UAC 弹窗循环。先校验 TOML/JSON（注意 BOM 与必填字段），修复后再重启应用。
 
 ### 请求返回 400 / 工具调用失败
 你的网关很可能只支持 `/v1/chat/completions`，不支持 `/v1/responses`。Codex 强制走 Responses API。要么换支持的网关，要么在前面架一个协议转换代理。
@@ -134,8 +166,11 @@ codex-desktop-custom-model/
 │   └── codex-desktop-custom-model/
 │       └── SKILL.md     # 可导入 Qoder / AI 助手的 skill
 └── scripts/
-    ├── check-provider.ps1   # Windows 兼容性检查
-    └── check-provider.sh    # macOS / Linux 兼容性检查
+    ├── check-provider.ps1        # Windows 兼容性检查
+    ├── check-provider.sh         # macOS / Linux 兼容性检查
+    ├── sync-model-catalog.ps1    # 从网关同步模型目录（桌面版选择器用）
+    ├── sync-model-catalog.sh     # 同上，macOS / Linux
+    └── model-entry-template.json # 完整 ModelInfo 模板条目（同步脚本依赖）
 ```
 
 ## 许可证
